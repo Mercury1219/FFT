@@ -3,7 +3,7 @@ clear; clc; close all;
 %% Nature 风格 FFT 分析图
 % 说明：
 % 1. 仅生成 FFT 分析图，不再输出原始温度曲线或去趋势温度波动图。
-% 2. 每个工况的 FFT 图独立保存，不使用合并子图。
+% 2. 四个横摇频率统一放在一张综合对比图中。
 % 3. 图片采用白底、克制配色、中文标注，并同时导出 PNG/PDF/SVG。
 
 setNatureFigureDefaults();
@@ -40,7 +40,8 @@ if ~exist(outputDir, "dir")
 end
 
 summaryAll = table();
-colors = naturePalette();
+fftOneSecond = struct([]);
+fftRaw = struct([]);
 
 %% 批量分析
 for c = 1:numel(cases)
@@ -91,14 +92,12 @@ for c = 1:numel(cases)
     [freq_1s, amp_1s] = singleSidedFFT(tempFluct_1s, 1);
     metrics_1s = extractFFTMetrics(freq_1s, amp_1s, rollFreq, doubleFreq, oneSecondMaxFreq);
 
-    title_1s = sprintf("%s 工况 FFT 频谱", caseName);
-    note_1s = sprintf("测点 %s | 主频 %.3f Hz | 二倍频/基频 %.2f", ...
-        deviceName, metrics_1s.mainFreq, metrics_1s.doubleToRoll);
-    outBase_1s = fullfile(outputDir, sprintf("%s_%s_FFT_1s_Nature", ...
-        erase(caseName, " "), deviceNameUnder));
-
-    plotNatureFFT(freq_1s, amp_1s, rollFreq, doubleFreq, oneSecondMaxFreq, ...
-        title_1s, note_1s, colors.blue, outBase_1s);
+    fftOneSecond(c).freq = freq_1s;
+    fftOneSecond(c).amp = amp_1s;
+    fftOneSecond(c).caseName = char(caseName);
+    fftOneSecond(c).rollFreq = rollFreq;
+    fftOneSecond(c).doubleFreq = doubleFreq;
+    fftOneSecond(c).metrics = metrics_1s;
 
     %% 原始 0.06 s 数据 FFT
     validIdx = ~isnan(time) & ~isnan(temp);
@@ -112,14 +111,12 @@ for c = 1:numel(cases)
     [freqRaw, ampRaw] = singleSidedFFT(tempUniform, 1 / rawTimeStep);
     metricsRaw = extractFFTMetrics(freqRaw, ampRaw, rollFreq, doubleFreq, rawMaxFreq);
 
-    titleRaw = sprintf("%s 工况 FFT 频谱", caseName);
-    noteRaw = sprintf("测点 %s | 主频 %.3f Hz | 二倍频/基频 %.2f", ...
-        deviceName, metricsRaw.mainFreq, metricsRaw.doubleToRoll);
-    outBaseRaw = fullfile(outputDir, sprintf("%s_%s_FFT_raw006s_Nature", ...
-        erase(caseName, " "), deviceNameUnder));
-
-    plotNatureFFT(freqRaw, ampRaw, rollFreq, doubleFreq, rawMaxFreq, ...
-        titleRaw, noteRaw, colors.teal, outBaseRaw);
+    fftRaw(c).freq = freqRaw;
+    fftRaw(c).amp = ampRaw;
+    fftRaw(c).caseName = char(caseName);
+    fftRaw(c).rollFreq = rollFreq;
+    fftRaw(c).doubleFreq = doubleFreq;
+    fftRaw(c).metrics = metricsRaw;
 
     %% 导出 FFT 数据
     fftTable_1s = table(freq_1s(:), amp_1s(:), ...
@@ -179,6 +176,11 @@ for c = 1:numel(cases)
         metricsRaw.mainFreq, metricsRaw.doubleToRoll);
 end
 
+%% 绘制四个横摇频率综合 FFT 对比图
+combinedOutBase = fullfile(outputDir, "FFT_all_roll_frequencies_Nature");
+plotCombinedNatureFFT(fftOneSecond, fftRaw, oneSecondMaxFreq, rawMaxFreq, ...
+    char(selectedDevice), combinedOutBase);
+
 %% 导出汇总结果
 summaryFile = fullfile(outputDir, "FFT_summary_all_cases_Nature.xlsx");
 writetable(summaryAll, summaryFile);
@@ -219,11 +221,20 @@ end
 
 function colors = naturePalette()
     colors.blue = [0.000, 0.278, 0.671];
+    colors.sky = [0.337, 0.706, 0.914];
     colors.teal = [0.000, 0.471, 0.451];
+    colors.green = [0.000, 0.620, 0.451];
     colors.orange = [0.835, 0.369, 0.000];
     colors.red = [0.733, 0.157, 0.184];
+    colors.purple = [0.494, 0.184, 0.557];
     colors.gray = [0.220, 0.220, 0.220];
     colors.lightGray = [0.890, 0.890, 0.890];
+    colors.caseLines = [
+        colors.blue
+        colors.orange
+        colors.green
+        colors.purple
+    ];
 end
 
 function [freq, amp] = singleSidedFFT(signal, fs)
@@ -256,74 +267,71 @@ function metrics = extractFFTMetrics(freq, amp, rollFreq, doubleFreq, maxFreq)
     metrics.doubleToRoll = metrics.doubleAmp / max(metrics.rollAmp, eps);
 end
 
-function plotNatureFFT(freq, amp, rollFreq, doubleFreq, maxFreq, figTitle, noteText, mainColor, outBase)
+function plotCombinedNatureFFT(fftOneSecond, fftRaw, oneSecondMaxFreq, rawMaxFreq, deviceName, outBase)
     colors = naturePalette();
-    fig = figure("Name", figTitle, "Units", "centimeters", ...
-        "Position", [2 2 17.6 10.8], "Color", "w");
-    ax = axes(fig);
+    fig = figure("Name", "四个横摇频率 FFT 频谱对比", "Units", "centimeters", ...
+        "Position", [2 2 18.6 17.2], "Color", "w");
+
+    tl = tiledlayout(fig, 2, 1, "TileSpacing", "compact", "Padding", "loose");
+    title(tl, "四个横摇频率 FFT 频谱对比", "FontSize", 12, "FontWeight", "bold");
+    subtitle(tl, sprintf("测点 %s；虚线表示各工况二倍频位置，图例给出主频和二倍频/基频", deviceName), ...
+        "FontSize", 9, "Color", [0.35 0.35 0.35]);
+
+    ax1 = nexttile(tl, 1);
+    plotCombinedPanel(ax1, fftOneSecond, oneSecondMaxFreq, "1 s 平均去趋势信号", colors);
+
+    ax2 = nexttile(tl, 2);
+    plotCombinedPanel(ax2, fftRaw, rawMaxFreq, "原始 0.06 s 信号", colors);
+
+    xlabel(tl, "频率 (Hz)", "FontSize", 10);
+
+    exportgraphics(fig, outBase + ".png", "Resolution", 600);
+    exportgraphics(fig, outBase + ".pdf", "ContentType", "vector");
+    exportgraphics(fig, outBase + ".svg", "ContentType", "vector");
+    close(fig);
+end
+
+function plotCombinedPanel(ax, fftData, maxFreq, panelTitle, colors)
     hold(ax, "on");
 
-    mask = freq >= 0 & freq <= maxFreq;
-    freqPlot = freq(mask);
-    ampPlot = amp(mask);
+    yMax = 0;
+    lineHandles = gobjects(1, numel(fftData));
+    legendText = cell(1, numel(fftData));
 
-    h = area(ax, freqPlot, ampPlot, ...
-        "FaceColor", mainColor, ...
-        "FaceAlpha", 0.18, ...
-        "EdgeColor", mainColor, ...
-        "LineWidth", 1.8);
-    h.DisplayName = "FFT 幅值谱";
+    for i = 1:numel(fftData)
+        mask = fftData(i).freq >= 0 & fftData(i).freq <= maxFreq;
+        freqPlot = fftData(i).freq(mask);
+        ampPlot = fftData(i).amp(mask);
+        lineColor = colors.caseLines(i, :);
 
-    [peakAmp, idxPeak] = max(ampPlot(freqPlot > 0));
-    freqNonzero = freqPlot(freqPlot > 0);
-    peakFreq = freqNonzero(idxPeak);
+        lineHandles(i) = plot(ax, freqPlot, ampPlot, ...
+            "Color", lineColor, ...
+            "LineWidth", 1.55);
 
-    s = scatter(ax, peakFreq, peakAmp, 34, ...
-        "MarkerFaceColor", colors.orange, ...
-        "MarkerEdgeColor", "w", ...
-        "LineWidth", 0.8, ...
-        "DisplayName", "主峰");
+        scatter(ax, fftData(i).metrics.mainFreq, fftData(i).metrics.mainAmp, ...
+            22, ...
+            "MarkerFaceColor", lineColor, ...
+            "MarkerEdgeColor", "w", ...
+            "LineWidth", 0.7, ...
+            "HandleVisibility", "off");
 
-    yMax = max(ampPlot) * 1.22;
+        xline(ax, fftData(i).doubleFreq, ":", ...
+            "Color", lineColor, ...
+            "LineWidth", 0.9, ...
+            "Alpha", 0.55, ...
+            "HandleVisibility", "off");
+
+        yMax = max(yMax, max(ampPlot, [], "omitnan"));
+        legendText{i} = sprintf("%s | 主频 %.3f Hz | 比值 %.2f", ...
+            fftData(i).caseName, ...
+            fftData(i).metrics.mainFreq, ...
+            fftData(i).metrics.doubleToRoll);
+    end
+
+    yMax = yMax * 1.16;
     if yMax <= 0 || isnan(yMax)
         yMax = 1;
     end
-
-    xline(ax, rollFreq, "--", ...
-        "Color", colors.gray, ...
-        "LineWidth", 1.15, ...
-        "HandleVisibility", "off");
-    xline(ax, doubleFreq, "--", ...
-        "Color", colors.red, ...
-        "LineWidth", 1.15, ...
-        "HandleVisibility", "off");
-
-    text(ax, rollFreq, yMax * 0.90, sprintf("基频 %.2f Hz", rollFreq), ...
-        "Color", colors.gray, ...
-        "FontSize", 8.5, ...
-        "HorizontalAlignment", "center", ...
-        "VerticalAlignment", "top", ...
-        "BackgroundColor", "w", ...
-        "Margin", 2);
-    text(ax, doubleFreq, yMax * 0.82, sprintf("二倍频 %.2f Hz", doubleFreq), ...
-        "Color", colors.red, ...
-        "FontSize", 8.5, ...
-        "HorizontalAlignment", "center", ...
-        "VerticalAlignment", "top", ...
-        "BackgroundColor", "w", ...
-        "Margin", 2);
-
-    text(ax, peakFreq, min(peakAmp * 1.08, yMax * 0.92), ...
-        sprintf("主频 %.3f Hz", peakFreq), ...
-        "Color", colors.gray, ...
-        "FontSize", 9, ...
-        "HorizontalAlignment", "center", ...
-        "VerticalAlignment", "bottom");
-
-    title(ax, figTitle, "FontSize", 11, "FontWeight", "bold");
-    subtitle(ax, noteText, "FontSize", 9, "Color", [0.35 0.35 0.35]);
-    xlabel(ax, "频率 (Hz)", "FontSize", 10);
-    ylabel(ax, "FFT 幅值", "FontSize", 10);
 
     xlim(ax, [0 maxFreq]);
     ylim(ax, [0 yMax]);
@@ -333,11 +341,9 @@ function plotNatureFFT(freq, amp, rollFreq, doubleFreq, maxFreq, figTitle, noteT
     ax.MinorGridAlpha = 0.20;
     ax.Layer = "top";
 
-    legend(ax, [h, s], {"FFT 幅值谱", "主峰"}, ...
-        "Location", "northeast", "NumColumns", 1);
-
-    exportgraphics(fig, outBase + ".png", "Resolution", 600);
-    exportgraphics(fig, outBase + ".pdf", "ContentType", "vector");
-    exportgraphics(fig, outBase + ".svg", "ContentType", "vector");
-    close(fig);
+    title(ax, panelTitle, "FontSize", 10, "FontWeight", "bold");
+    ylabel(ax, "FFT 幅值", "FontSize", 9);
+    legend(ax, lineHandles, legendText, ...
+        "Location", "eastoutside", ...
+        "FontSize", 8);
 end
