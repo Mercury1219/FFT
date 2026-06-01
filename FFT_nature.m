@@ -3,8 +3,9 @@ clear; clc; close all;
 %% Nature 风格 FFT 分析图
 % 说明：
 % 1. 仅生成 FFT 分析图，不再输出原始温度曲线或去趋势温度波动图。
-% 2. 四个横摇频率统一放在一张综合对比图中。
-% 3. 图片采用白底、克制配色、中文标注，并同时导出 PNG/PDF/SVG。
+% 2. 四个横摇频率的 FFT 结果统一放在一张三维峰峦图中。
+% 3. FFT 频率为正视图横轴，横摇频率为右侧深度轴，FFT 幅值为竖轴。
+% 4. 图片采用白底、克制配色、中文标注，并同时导出 PNG/PDF/SVG。
 
 setNatureFigureDefaults();
 
@@ -176,9 +177,9 @@ for c = 1:numel(cases)
         metricsRaw.mainFreq, metricsRaw.doubleToRoll);
 end
 
-%% 绘制四个横摇频率综合 FFT 对比图
-combinedOutBase = fullfile(outputDir, "FFT_all_roll_frequencies_Nature");
-plotCombinedNatureFFT(fftOneSecond, fftRaw, oneSecondMaxFreq, rawMaxFreq, ...
+%% 绘制四个横摇频率三维峰峦 FFT 图
+combinedOutBase = fullfile(outputDir, "FFT_all_roll_frequencies_3D_ridge_Nature");
+plotNatureFFTRidge3D(fftRaw, rawMaxFreq, ...
     char(selectedDevice), combinedOutBase);
 
 %% 导出汇总结果
@@ -235,6 +236,12 @@ function colors = naturePalette()
         colors.green
         colors.purple
     ];
+    colors.caseFaces = [
+        0.477, 0.694, 0.824
+        0.929, 0.627, 0.329
+        0.520, 0.780, 0.662
+        0.647, 0.525, 0.745
+    ];
 end
 
 function [freq, amp] = singleSidedFFT(signal, fs)
@@ -267,34 +274,14 @@ function metrics = extractFFTMetrics(freq, amp, rollFreq, doubleFreq, maxFreq)
     metrics.doubleToRoll = metrics.doubleAmp / max(metrics.rollAmp, eps);
 end
 
-function plotCombinedNatureFFT(fftOneSecond, fftRaw, oneSecondMaxFreq, rawMaxFreq, deviceName, outBase)
+function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, outBase)
     colors = naturePalette();
-    fig = figure("Name", "四个横摇频率 FFT 频谱对比", "Units", "centimeters", ...
-        "Position", [2 2 18.6 17.2], "Color", "w");
-
-    tl = tiledlayout(fig, 2, 1, "TileSpacing", "compact", "Padding", "loose");
-    title(tl, "四个横摇频率 FFT 频谱对比", "FontSize", 12, "FontWeight", "bold");
-    subtitle(tl, sprintf("测点 %s；虚线表示各工况二倍频位置，图例给出主频和二倍频/基频", deviceName), ...
-        "FontSize", 9, "Color", [0.35 0.35 0.35]);
-
-    ax1 = nexttile(tl, 1);
-    plotCombinedPanel(ax1, fftOneSecond, oneSecondMaxFreq, "1 s 平均去趋势信号", colors);
-
-    ax2 = nexttile(tl, 2);
-    plotCombinedPanel(ax2, fftRaw, rawMaxFreq, "原始 0.06 s 信号", colors);
-
-    xlabel(tl, "频率 (Hz)", "FontSize", 10);
-
-    exportgraphics(fig, outBase + ".png", "Resolution", 600);
-    exportgraphics(fig, outBase + ".pdf", "ContentType", "vector");
-    exportgraphics(fig, outBase + ".svg", "ContentType", "vector");
-    close(fig);
-end
-
-function plotCombinedPanel(ax, fftData, maxFreq, panelTitle, colors)
+    fig = figure("Name", "四个横摇频率 FFT 三维峰峦图", "Units", "centimeters", ...
+        "Position", [2 2 18.4 13.2], "Color", "w");
+    ax = axes(fig);
     hold(ax, "on");
 
-    yMax = 0;
+    zMax = 0;
     lineHandles = gobjects(1, numel(fftData));
     legendText = cell(1, numel(fftData));
 
@@ -302,48 +289,90 @@ function plotCombinedPanel(ax, fftData, maxFreq, panelTitle, colors)
         mask = fftData(i).freq >= 0 & fftData(i).freq <= maxFreq;
         freqPlot = fftData(i).freq(mask);
         ampPlot = fftData(i).amp(mask);
+        freqPlot = freqPlot(:)';
+        ampPlot = ampPlot(:)';
+        rollFreq = fftData(i).rollFreq;
         lineColor = colors.caseLines(i, :);
+        faceColor = colors.caseFaces(i, :);
 
-        lineHandles(i) = plot(ax, freqPlot, ampPlot, ...
+        fill3(ax, ...
+            [freqPlot, fliplr(freqPlot)], ...
+            [rollFreq * ones(size(freqPlot)), rollFreq * ones(size(freqPlot))], ...
+            [ampPlot, zeros(size(ampPlot))], ...
+            faceColor, ...
+            "FaceAlpha", 0.38, ...
+            "EdgeColor", "none", ...
+            "HandleVisibility", "off");
+
+        lineHandles(i) = plot3(ax, freqPlot, rollFreq * ones(size(freqPlot)), ampPlot, ...
             "Color", lineColor, ...
-            "LineWidth", 1.55);
+            "LineWidth", 1.75);
 
-        scatter(ax, fftData(i).metrics.mainFreq, fftData(i).metrics.mainAmp, ...
-            22, ...
+        scatter3(ax, fftData(i).metrics.mainFreq, rollFreq, fftData(i).metrics.mainAmp, ...
+            28, ...
             "MarkerFaceColor", lineColor, ...
             "MarkerEdgeColor", "w", ...
-            "LineWidth", 0.7, ...
+            "LineWidth", 0.8, ...
             "HandleVisibility", "off");
 
-        xline(ax, fftData(i).doubleFreq, ":", ...
+        plot3(ax, ...
+            [fftData(i).doubleFreq, fftData(i).doubleFreq], ...
+            [rollFreq, rollFreq], ...
+            [0, fftData(i).metrics.doubleAmp], ...
             "Color", lineColor, ...
-            "LineWidth", 0.9, ...
-            "Alpha", 0.55, ...
+            "LineStyle", ":", ...
+            "LineWidth", 1.05, ...
             "HandleVisibility", "off");
 
-        yMax = max(yMax, max(ampPlot, [], "omitnan"));
-        legendText{i} = sprintf("%s | 主频 %.3f Hz | 比值 %.2f", ...
+        zMax = max(zMax, max(ampPlot, [], "omitnan"));
+        legendText{i} = sprintf("%s | %.3f Hz | %.2f", ...
             fftData(i).caseName, ...
             fftData(i).metrics.mainFreq, ...
             fftData(i).metrics.doubleToRoll);
     end
 
-    yMax = yMax * 1.16;
-    if yMax <= 0 || isnan(yMax)
-        yMax = 1;
+    zMax = zMax * 1.14;
+    if zMax <= 0 || isnan(zMax)
+        zMax = 1;
     end
 
+    rollFreqs = [fftData.rollFreq];
     xlim(ax, [0 maxFreq]);
-    ylim(ax, [0 yMax]);
-    grid(ax, "on");
-    ax.GridColor = colors.lightGray;
-    ax.GridAlpha = 0.55;
-    ax.MinorGridAlpha = 0.20;
-    ax.Layer = "top";
+    ylim(ax, [min(rollFreqs) - 0.015, max(rollFreqs) + 0.015]);
+    zlim(ax, [0 zMax]);
 
-    title(ax, panelTitle, "FontSize", 10, "FontWeight", "bold");
-    ylabel(ax, "FFT 幅值", "FontSize", 9);
+    xlabel(ax, "FFT 频率 (Hz)", "FontSize", 10);
+    ylabel(ax, "横摇频率 (Hz)", "FontSize", 10);
+    zlabel(ax, "FFT 幅值", "FontSize", 10);
+    title(ax, "四个横摇频率 FFT 三维峰峦图", ...
+        "FontSize", 12, "FontWeight", "bold");
+    subtitle(ax, sprintf("测点 %s；原始 0.06 s 信号；半透明峰面展示频谱能量分布", deviceName), ...
+        "FontSize", 9, "Color", [0.35 0.35 0.35]);
+
+    yticks(ax, rollFreqs);
+    yticklabels(ax, arrayfun(@(v) sprintf("%.2f", v), rollFreqs, "UniformOutput", false));
+    xticks(ax, 0:0.2:maxFreq);
+
+    grid(ax, "on");
+    box(ax, "on");
+    ax.GridColor = colors.lightGray;
+    ax.GridAlpha = 0.72;
+    ax.MinorGridColor = colors.lightGray;
+    ax.MinorGridAlpha = 0.28;
+    ax.XMinorGrid = "on";
+    ax.YMinorGrid = "on";
+    ax.Layer = "top";
+    ax.Projection = "perspective";
+    ax.PlotBoxAspectRatio = [1.45 0.72 0.78];
+    ax.Color = [1 1 1];
+    view(ax, [42 24]);
+
     legend(ax, lineHandles, legendText, ...
-        "Location", "eastoutside", ...
-        "FontSize", 8);
+        "Location", "northeastoutside", ...
+        "FontSize", 7);
+
+    exportgraphics(fig, outBase + ".png", "Resolution", 600);
+    exportgraphics(fig, outBase + ".pdf", "ContentType", "vector");
+    exportgraphics(fig, outBase + ".svg", "ContentType", "vector");
+    close(fig);
 end
