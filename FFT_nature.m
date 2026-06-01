@@ -43,7 +43,7 @@ plotSettings.frequencyTickStep = 0.10;   % FFT 频率刻度间隔，单位 Hz
 plotSettings.showPeakLabels = true;      % 是否标注主频值
 plotSettings.peakLabelOffset = 0.045;    % 主频标注高度偏移
 plotSettings.faceAlpha = 0.36;           % 峰面透明度
-plotSettings.viewAngle = [0 0];          % 正视 X-Z 平面：FFT频率-FFT幅值平面完全面向观察者
+plotSettings.viewAngle = [14 8];         % 近正视 X-Z 平面，并让横摇频率轴向右后方延伸
 plotSettings.exportResolution = 600;      % 导出分辨率
 plotSettings.baseGridColor = [0.78 0.78 0.78];
 
@@ -404,7 +404,8 @@ function plotNatureFFTRidge3D(fftData, maxFreq, plotSettings)
 
     rollFreqs = [fftData.rollFreq];
 
-    xlim(ax, [0 maxFreq]);
+    rightAxisPad = 0.08 * maxFreq;
+    xlim(ax, [0 maxFreq + rightAxisPad]);
     ylim(ax, [min(rollFreqs) - 0.015, max(rollFreqs) + 0.015]);
     zlim(ax, [0 zMax]);
 
@@ -412,12 +413,11 @@ function plotNatureFFTRidge3D(fftData, maxFreq, plotSettings)
     ax.FontSize = 15;
 
     xlabel(ax, "FFT 频率 (Hz)", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
-    ylabel(ax, "横摇频率 (Hz)", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
+    ylabel(ax, "");
     zlabel(ax, "FFT 幅值", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
 
     yticks(ax, rollFreqs);
-    yticklabels(ax, arrayfun(@(v) sprintf("%.2f", v), rollFreqs, ...
-        "UniformOutput", false));
+    yticklabels(ax, repmat({""}, size(rollFreqs)));
 
     xticks(ax, 0:plotSettings.frequencyTickStep:maxFreq);
 
@@ -427,6 +427,7 @@ function plotNatureFFTRidge3D(fftData, maxFreq, plotSettings)
     drawBaseGrid(ax, 0:plotSettings.frequencyTickStep:maxFreq, rollFreqs, ...
         [0 maxFreq], [min(rollFreqs) max(rollFreqs)], ...
         plotSettings.baseGridColor);
+    drawRightDepthAxis(ax, maxFreq, rollFreqs, "横摇频率 (Hz)");
 
     ax.XGrid = "off";
     ax.YGrid = "off";
@@ -476,4 +477,43 @@ function drawBaseGrid(ax, xTicks, yTicks, xLimits, yLimits, gridColor)
             "LineStyle", "-", ...
             "HandleVisibility", "off");
     end
+end
+
+function drawRightDepthAxis(ax, maxFreq, rollFreqs, axisLabel)
+    z0 = 0;
+    xTickLength = 0.018 * maxFreq;
+    xTextOffset = 0.032 * maxFreq;
+    yLimits = [min(rollFreqs) max(rollFreqs)];
+
+    hold(ax, "on");
+
+    line(ax, [maxFreq maxFreq], yLimits, [z0 z0], ...
+        "Color", [0 0 0], ...
+        "LineWidth", 1.05, ...
+        "HandleVisibility", "off");
+
+    for i = 1:numel(rollFreqs)
+        y = rollFreqs(i);
+        line(ax, [maxFreq maxFreq + xTickLength], [y y], [z0 z0], ...
+            "Color", [0 0 0], ...
+            "LineWidth", 1.0, ...
+            "HandleVisibility", "off");
+
+        text(ax, maxFreq + xTextOffset, y, z0, ...
+            sprintf("%.2f", y), ...
+            "FontName", "Times New Roman", ...
+            "FontSize", 15, ...
+            "HorizontalAlignment", "left", ...
+            "VerticalAlignment", "middle", ...
+            "HandleVisibility", "off");
+    end
+
+    text(ax, maxFreq + 1.85 * xTextOffset, mean(rollFreqs), z0, ...
+        axisLabel, ...
+        "FontName", "SimSun", ...
+        "FontSize", 18, ...
+        "FontWeight", "bold", ...
+        "HorizontalAlignment", "center", ...
+        "VerticalAlignment", "middle", ...
+        "HandleVisibility", "off");
 end
