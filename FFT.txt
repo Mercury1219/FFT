@@ -43,7 +43,7 @@ plotSettings.frequencyTickStep = 0.10;   % FFT 频率刻度间隔，单位 Hz
 plotSettings.showPeakLabels = true;      % 是否标注主频值
 plotSettings.peakLabelOffset = 0.045;    % 主频标注高度偏移
 plotSettings.faceAlpha = 0.36;           % 峰面透明度
-plotSettings.viewAngle = [-45 12];       % 2.5D斜投影：Y轴按约45°方向向右后方延伸
+plotSettings.viewAngle = [0 0];          % 正视 X-Z 平面：FFT频率-FFT幅值平面完全面向观察者
 plotSettings.exportResolution = 600;      % 导出分辨率
 plotSettings.baseGridColor = [0.78 0.78 0.78];
 
