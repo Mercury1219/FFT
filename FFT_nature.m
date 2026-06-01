@@ -1,11 +1,12 @@
 clear; clc; close all;
 
-%% Nature 风格 FFT 分析图
+%% Nature 风格 FFT 三维峰峦图
 % 说明：
-% 1. 仅生成 FFT 分析图，不再输出原始温度曲线或去趋势温度波动图。
-% 2. 四个横摇频率的 FFT 结果统一放在一张三维峰峦图中。
-% 3. FFT 频率为正视图横轴，横摇频率为右侧深度轴，FFT 幅值为竖轴。
-% 4. 图片采用白底、克制配色、中文标注，并导出 PNG/PDF/FIG。
+% 1. 仅生成 FFT 分析图，不输出温度时域图。
+% 2. 四个横摇频率的 FFT 结果放在同一张三维峰峦图中。
+% 3. FFT 频率为前方横轴，横摇频率为右侧深度轴，FFT 幅值为竖轴。
+% 4. 曲线经过插值和平滑处理，并标注各工况主频值。
+% 5. 导出 PNG、PDF 和 MATLAB 可编辑 FIG 文件。
 
 setNatureFigureDefaults();
 
@@ -37,14 +38,15 @@ rawMaxFreq = 1.00;
 
 %% 绘图可调参数
 plotSettings.smoothWindow = 21;          % 越大越平滑，建议 11-31，需为奇数
-plotSettings.interpolationFactor = 10;   % 曲线加密倍数，越大线条越细腻
+plotSettings.interpolationFactor = 10;   % 曲线加密倍数
 plotSettings.frequencyTickStep = 0.10;   % FFT 频率刻度间隔，单位 Hz
-plotSettings.showPeakLabels = true;      % 是否标注各工况主频值
-plotSettings.peakLabelOffset = 0.045;    % 主频标注相对 z 轴高度偏移
+plotSettings.showPeakLabels = true;      % 是否标注主频值
+plotSettings.peakLabelOffset = 0.045;    % 主频标注高度偏移
 plotSettings.faceAlpha = 0.36;           % 峰面透明度
 plotSettings.viewAngle = [42 24];        % 三维视角：[方位角, 俯仰角]
 plotSettings.exportResolution = 600;      % 导出分辨率
 
+%% 输出文件夹
 outputDir = fullfile(pwd, "FFT_660kw_smoothed_w5_Nature_Output");
 if ~exist(outputDir, "dir")
     mkdir(outputDir);
@@ -99,7 +101,7 @@ for c = 1:numel(cases)
     trend = movmean(temp_1s, trendWindowSeconds, "omitnan");
     tempFluct_1s = temp_1s - trend;
 
-    %% 每秒平均数据 FFT
+    %% 1 s 平均数据 FFT
     [freq_1s, amp_1s] = singleSidedFFT(tempFluct_1s, 1);
     metrics_1s = extractFFTMetrics(freq_1s, amp_1s, rollFreq, doubleFreq, oneSecondMaxFreq);
 
@@ -188,9 +190,7 @@ for c = 1:numel(cases)
 end
 
 %% 绘制四个横摇频率三维峰峦 FFT 图
-combinedOutBase = fullfile(outputDir, "FFT_all_roll_frequencies_3D_ridge_Nature");
-plotNatureFFTRidge3D(fftRaw, rawMaxFreq, ...
-    char(selectedDevice), combinedOutBase, plotSettings);
+plotNatureFFTRidge3D(fftRaw, rawMaxFreq, char(selectedDevice), plotSettings);
 
 %% 导出汇总结果
 summaryFile = fullfile(outputDir, "FFT_summary_all_cases_Nature.xlsx");
@@ -203,12 +203,13 @@ fprintf("\n全部 FFT 图和数据已保存到：\n%s\n", outputDir);
 
 %% 局部函数
 function setNatureFigureDefaults()
-    fontName = pickAvailableFont(["Microsoft YaHei", "SimHei", "Arial Unicode MS", "Arial"]);
+    textFontName = pickAvailableFont(["SimSun", "宋体", "Microsoft YaHei", "SimHei", "Arial Unicode MS"]);
+    numberFontName = pickAvailableFont(["Times New Roman", "Times", "Arial"]);
 
     set(groot, "defaultFigureColor", "w");
-    set(groot, "defaultAxesFontName", fontName);
-    set(groot, "defaultTextFontName", fontName);
-    set(groot, "defaultAxesFontSize", 10);
+    set(groot, "defaultAxesFontName", numberFontName);
+    set(groot, "defaultTextFontName", textFontName);
+    set(groot, "defaultAxesFontSize", 13);
     set(groot, "defaultAxesLineWidth", 0.9);
     set(groot, "defaultAxesBox", "off");
     set(groot, "defaultAxesTickDir", "out");
@@ -240,12 +241,14 @@ function colors = naturePalette()
     colors.purple = [0.494, 0.184, 0.557];
     colors.gray = [0.220, 0.220, 0.220];
     colors.lightGray = [0.890, 0.890, 0.890];
+
     colors.caseLines = [
         colors.blue
         colors.orange
         colors.green
         colors.purple
     ];
+
     colors.caseFaces = [
         0.477, 0.694, 0.824
         0.929, 0.627, 0.329
@@ -265,6 +268,7 @@ function [freq, amp] = singleSidedFFT(signal, fs)
     P2 = abs(Y / N);
     amp = P2(1:floor(N / 2) + 1);
     amp(2:end-1) = 2 * amp(2:end-1);
+
     freq = fs * (0:floor(N / 2)) / N;
 end
 
@@ -275,6 +279,7 @@ function metrics = extractFFTMetrics(freq, amp, rollFreq, doubleFreq, maxFreq)
     searchMask = freq > 0 & freq <= maxFreq;
     freqSearch = freq(searchMask);
     ampSearch = amp(searchMask);
+
     [mainAmp, idxMain] = max(ampSearch);
 
     metrics.mainFreq = freqSearch(idxMain);
@@ -284,10 +289,14 @@ function metrics = extractFFTMetrics(freq, amp, rollFreq, doubleFreq, maxFreq)
     metrics.doubleToRoll = metrics.doubleAmp / max(metrics.rollAmp, eps);
 end
 
-function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, outBase, plotSettings)
+function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, plotSettings)
     colors = naturePalette();
-    fig = figure("Name", "四个横摇频率 FFT 三维峰峦图", "Units", "centimeters", ...
-        "Position", [2 2 18.4 13.2], "Color", "w");
+
+    fig = figure("Name", "四个横摇频率 FFT 三维峰峦图", ...
+        "Units", "centimeters", ...
+        "Position", [2 2 18.4 13.2], ...
+        "Color", "w");
+
     ax = axes(fig);
     hold(ax, "on");
 
@@ -297,10 +306,13 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, outBase, plotSetting
 
     for i = 1:numel(fftData)
         mask = fftData(i).freq >= 0 & fftData(i).freq <= maxFreq;
+
         freqPlot = fftData(i).freq(mask);
         ampPlot = fftData(i).amp(mask);
+
         freqPlot = freqPlot(:)';
         ampPlot = ampPlot(:)';
+
         rollFreq = fftData(i).rollFreq;
         lineColor = colors.caseLines(i, :);
         faceColor = colors.caseFaces(i, :);
@@ -313,30 +325,36 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, outBase, plotSetting
         if mod(localWindow, 2) == 0
             localWindow = max(1, localWindow - 1);
         end
+
         if localWindow >= 3
-            ampPlotSmooth = smoothdata(ampFine, "gaussian", localWindow);
+            ampSmooth = smoothdata(ampFine, "gaussian", localWindow);
         else
-            ampPlotSmooth = ampFine;
+            ampSmooth = ampFine;
         end
-        ampPlotSmooth = max(ampPlotSmooth, 0);
+
+        ampSmooth = max(ampSmooth, 0);
 
         mainFreq = fftData(i).metrics.mainFreq;
-        mainAmpSmooth = interp1(freqFine, ampPlotSmooth, mainFreq, "linear", "extrap");
+        mainAmpSmooth = interp1(freqFine, ampSmooth, mainFreq, "linear", "extrap");
 
         fill3(ax, ...
             [freqFine, fliplr(freqFine)], ...
             [rollFreq * ones(size(freqFine)), rollFreq * ones(size(freqFine))], ...
-            [ampPlotSmooth, zeros(size(ampPlotSmooth))], ...
+            [ampSmooth, zeros(size(ampSmooth))], ...
             faceColor, ...
             "FaceAlpha", plotSettings.faceAlpha, ...
             "EdgeColor", "none", ...
             "HandleVisibility", "off");
 
-        lineHandles(i) = plot3(ax, freqFine, rollFreq * ones(size(freqFine)), ampPlotSmooth, ...
+        lineHandles(i) = plot3(ax, ...
+            freqFine, ...
+            rollFreq * ones(size(freqFine)), ...
+            ampSmooth, ...
             "Color", lineColor, ...
             "LineWidth", 1.95);
 
-        scatter3(ax, mainFreq, rollFreq, mainAmpSmooth, ...
+        scatter3(ax, ...
+            mainFreq, rollFreq, mainAmpSmooth, ...
             32, ...
             "MarkerFaceColor", lineColor, ...
             "MarkerEdgeColor", "w", ...
@@ -344,10 +362,14 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, outBase, plotSetting
             "HandleVisibility", "off");
 
         if plotSettings.showPeakLabels
-            text(ax, mainFreq, rollFreq, mainAmpSmooth + plotSettings.peakLabelOffset * max(mainAmpSmooth, 1), ...
+            text(ax, ...
+                mainFreq, ...
+                rollFreq, ...
+                mainAmpSmooth + plotSettings.peakLabelOffset * max(mainAmpSmooth, 1), ...
                 sprintf("%.2f Hz", mainFreq), ...
                 "Color", lineColor, ...
-                "FontSize", 8, ...
+                "FontName", "Times New Roman", ...
+                "FontSize", 12, ...
                 "FontWeight", "bold", ...
                 "HorizontalAlignment", "center", ...
                 "VerticalAlignment", "bottom", ...
@@ -356,16 +378,20 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, outBase, plotSetting
                 "HandleVisibility", "off");
         end
 
+        doubleAmpSmooth = interp1(freqFine, ampSmooth, fftData(i).doubleFreq, ...
+            "linear", "extrap");
+
         plot3(ax, ...
             [fftData(i).doubleFreq, fftData(i).doubleFreq], ...
             [rollFreq, rollFreq], ...
-            [0, interp1(freqFine, ampPlotSmooth, fftData(i).doubleFreq, "linear", "extrap")], ...
+            [0, doubleAmpSmooth], ...
             "Color", lineColor, ...
             "LineStyle", ":", ...
             "LineWidth", 1.05, ...
             "HandleVisibility", "off");
 
-        zMax = max(zMax, max(ampPlotSmooth, [], "omitnan"));
+        zMax = max(zMax, max(ampSmooth, [], "omitnan"));
+
         legendText{i} = sprintf("%s | %.3f Hz | %.2f", ...
             fftData(i).caseName, ...
             fftData(i).metrics.mainFreq, ...
@@ -378,24 +404,39 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, outBase, plotSetting
     end
 
     rollFreqs = [fftData.rollFreq];
+
     xlim(ax, [0 maxFreq]);
     ylim(ax, [min(rollFreqs) - 0.015, max(rollFreqs) + 0.015]);
     zlim(ax, [0 zMax]);
 
-    xlabel(ax, "FFT 频率 (Hz)", "FontSize", 10);
-    ylabel(ax, "横摇频率 (Hz)", "FontSize", 10);
-    zlabel(ax, "FFT 幅值", "FontSize", 10);
-    title(ax, "四个横摇频率 FFT 三维峰峦图", ...
-        "FontSize", 12, "FontWeight", "bold");
-    subtitle(ax, sprintf("测点 %s；原始 0.06 s 信号；半透明峰面展示频谱能量分布", deviceName), ...
-        "FontSize", 9, "Color", [0.35 0.35 0.35]);
+    ax.FontName = "Times New Roman";
+    ax.FontSize = 15;
+
+    xlabel(ax, "FFT 频率 (Hz)", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
+    ylabel(ax, "横摇频率 (Hz)", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
+    zlabel(ax, "FFT 幅值", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
+
+    captionText = sprintf("测点 %s；原始 0.06 s 信号；半透明峰面展示频谱能量分布", deviceName);
+    text(ax, maxFreq * 0.03, max(rollFreqs) + 0.008, zMax * 0.93, captionText, ...
+        "FontName", "SimSun", ...
+        "FontSize", 14, ...
+        "FontWeight", "bold", ...
+        "Color", [0.25 0.25 0.25], ...
+        "BackgroundColor", "w", ...
+        "Margin", 3, ...
+        "HorizontalAlignment", "left", ...
+        "VerticalAlignment", "top", ...
+        "HandleVisibility", "off");
 
     yticks(ax, rollFreqs);
-    yticklabels(ax, arrayfun(@(v) sprintf("%.2f", v), rollFreqs, "UniformOutput", false));
+    yticklabels(ax, arrayfun(@(v) sprintf("%.2f", v), rollFreqs, ...
+        "UniformOutput", false));
+
     xticks(ax, 0:plotSettings.frequencyTickStep:maxFreq);
 
     grid(ax, "on");
     box(ax, "on");
+
     ax.GridColor = colors.lightGray;
     ax.GridAlpha = 0.72;
     ax.MinorGridColor = colors.lightGray;
@@ -406,15 +447,18 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, outBase, plotSetting
     ax.Projection = "perspective";
     ax.PlotBoxAspectRatio = [1.45 0.72 0.78];
     ax.Color = [1 1 1];
+
     view(ax, plotSettings.viewAngle);
 
     legend(ax, lineHandles, legendText, ...
         "Location", "northeastoutside", ...
-        "FontSize", 7);
+        "FontName", "Times New Roman", ...
+        "FontSize", 11);
 
-    exportgraphics(ax, outBase + ".png", "Resolution", plotSettings.exportResolution);
-    exportgraphics(ax, outBase + ".pdf", "ContentType", "image", ...
-        "Resolution", plotSettings.exportResolution);
-    savefig(fig, outBase + ".fig");
-    close(fig);
+    rotate3d(fig, "on");
+
+disp("三维 FFT 峰峦图已在 MATLAB 中打开。");
+disp("可直接用鼠标拖动图窗手动调节视角。");
+disp("调好后可在 MATLAB 图窗中手动保存图片或 FIG 文件。");
+
 end
