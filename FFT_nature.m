@@ -45,6 +45,7 @@ plotSettings.peakLabelOffset = 0.045;    % 主频标注高度偏移
 plotSettings.faceAlpha = 0.36;           % 峰面透明度
 plotSettings.viewAngle = [-37 22];       % 三维视角：[方位角, 俯仰角]，接近示例图视角
 plotSettings.exportResolution = 600;      % 导出分辨率
+plotSettings.baseGridColor = [0.78 0.78 0.78];
 
 %% 输出文件夹
 outputDir = fullfile(pwd, "FFT_660kw_smoothed_w5_Nature_Output");
@@ -435,19 +436,25 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, plotSettings)
 
     xticks(ax, 0:plotSettings.frequencyTickStep:maxFreq);
 
-    grid(ax, "on");
-    box(ax, "on");
+    grid(ax, "off");
+    box(ax, "off");
 
-    ax.GridColor = colors.lightGray;
-    ax.GridAlpha = 0.72;
-    ax.MinorGridColor = colors.lightGray;
-    ax.MinorGridAlpha = 0.28;
-    ax.XMinorGrid = "on";
-    ax.YMinorGrid = "on";
+    drawBaseGrid(ax, 0:plotSettings.frequencyTickStep:maxFreq, rollFreqs, ...
+        [0 maxFreq], [min(rollFreqs) max(rollFreqs)], ...
+        plotSettings.baseGridColor);
+
+    ax.XGrid = "off";
+    ax.YGrid = "off";
+    ax.ZGrid = "off";
+    ax.XMinorGrid = "off";
+    ax.YMinorGrid = "off";
+    ax.ZMinorGrid = "off";
     ax.Layer = "top";
-    ax.Projection = "perspective";
+    ax.Projection = "orthographic";
     ax.PlotBoxAspectRatio = [1.45 0.72 0.78];
     ax.Color = [1 1 1];
+    ax.TickDir = "out";
+    ax.Box = "off";
 
     view(ax, plotSettings.viewAngle);
 
@@ -463,4 +470,25 @@ disp("三维 FFT 峰峦图已在 MATLAB 中打开。");
 disp("可直接用鼠标拖动图窗手动调节视角。");
 disp("调好后可在 MATLAB 图窗中手动保存图片或 FIG 文件。");
 
+end
+
+function drawBaseGrid(ax, xTicks, yTicks, xLimits, yLimits, gridColor)
+    z0 = 0;
+    hold(ax, "on");
+
+    for x = xTicks
+        line(ax, [x x], yLimits, [z0 z0], ...
+            "Color", gridColor, ...
+            "LineWidth", 0.75, ...
+            "LineStyle", "-", ...
+            "HandleVisibility", "off");
+    end
+
+    for y = yTicks
+        line(ax, xLimits, [y y], [z0 z0], ...
+            "Color", gridColor, ...
+            "LineWidth", 0.75, ...
+            "LineStyle", "-", ...
+            "HandleVisibility", "off");
+    end
 end
