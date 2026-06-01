@@ -43,7 +43,7 @@ plotSettings.frequencyTickStep = 0.10;   % FFT 频率刻度间隔，单位 Hz
 plotSettings.showPeakLabels = true;      % 是否标注主频值
 plotSettings.peakLabelOffset = 0.045;    % 主频标注高度偏移
 plotSettings.faceAlpha = 0.36;           % 峰面透明度
-plotSettings.viewAngle = [-37 22];       % 三维视角：[方位角, 俯仰角]，接近示例图视角
+plotSettings.viewAngle = [-88 12];       % 2.5D斜投影：X-Z面近似正视，Y轴向右后方延伸
 plotSettings.exportResolution = 600;      % 导出分辨率
 plotSettings.baseGridColor = [0.78 0.78 0.78];
 
@@ -191,7 +191,7 @@ for c = 1:numel(cases)
 end
 
 %% 绘制四个横摇频率三维峰峦 FFT 图
-plotNatureFFTRidge3D(fftRaw, rawMaxFreq, char(selectedDevice), plotSettings);
+plotNatureFFTRidge3D(fftRaw, rawMaxFreq, plotSettings);
 
 %% 导出汇总结果
 summaryFile = fullfile(outputDir, "FFT_summary_all_cases_Nature.xlsx");
@@ -290,7 +290,7 @@ function metrics = extractFFTMetrics(freq, amp, rollFreq, doubleFreq, maxFreq)
     metrics.doubleToRoll = metrics.doubleAmp / max(metrics.rollAmp, eps);
 end
 
-function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, plotSettings)
+function plotNatureFFTRidge3D(fftData, maxFreq, plotSettings)
     colors = naturePalette();
 
     fig = figure("Name", "四个横摇频率 FFT 三维峰峦图", ...
@@ -394,10 +394,7 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, plotSettings)
 
         zMax = max(zMax, max(ampSmooth, [], "omitnan"));
 
-        legendText{i} = sprintf("%s | %.3f Hz | %.2f", ...
-            fftData(i).caseName, ...
-            fftData(i).metrics.mainFreq, ...
-            fftData(i).metrics.doubleToRoll);
+        legendText{i} = sprintf("%s", fftData(i).caseName);
     end
 
     zMax = zMax * 1.14;
@@ -417,18 +414,6 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, plotSettings)
     xlabel(ax, "FFT 频率 (Hz)", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
     ylabel(ax, "横摇频率 (Hz)", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
     zlabel(ax, "FFT 幅值", "FontName", "SimSun", "FontSize", 18, "FontWeight", "bold");
-
-    captionText = sprintf("测点 %s；原始 0.06 s 信号；半透明峰面展示频谱能量分布", deviceName);
-    text(ax, maxFreq * 0.07, max(rollFreqs) + 0.006, zMax * 0.88, captionText, ...
-        "FontName", "SimSun", ...
-        "FontSize", 14, ...
-        "FontWeight", "bold", ...
-        "Color", [0.25 0.25 0.25], ...
-        "BackgroundColor", "w", ...
-        "Margin", 3, ...
-        "HorizontalAlignment", "left", ...
-        "VerticalAlignment", "top", ...
-        "HandleVisibility", "off");
 
     yticks(ax, rollFreqs);
     yticklabels(ax, arrayfun(@(v) sprintf("%.2f", v), rollFreqs, ...
@@ -461,7 +446,7 @@ function plotNatureFFTRidge3D(fftData, maxFreq, deviceName, plotSettings)
     legend(ax, lineHandles, legendText, ...
         "Location", "northeast", ...
         "FontName", "Times New Roman", ...
-        "FontSize", 11, ...
+        "FontSize", 15, ...
         "Box", "off");
 
     rotate3d(fig, "on");
